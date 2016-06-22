@@ -195,13 +195,35 @@ export class FunctionsService {
         return this.statusCodeMap[code] || this.genericStatusCodeMap[statusClass] || 'Unknown Status Code';
     }
 
-    runFunction(functionInfo: FunctionInfo, content: string) {
+    private handleFunctionException(functionInfo, e){
+        if (this.isEasyAuthEnabled) {
+            return Observable.of({
+                status: 401,
+                statusText: this.statusCodeToText(401),
+                text: () => 'Authentication is enabled for the function app. Disable authentication before running the function.'
+            });
+        } else if (e.status === 200 && e._body.type === 'error') {
+            return Observable.of({
+                status: 502,
+                statusText: this.statusCodeToText(502),
+                text: () => `There was an error running function (${functionInfo.name}). Check logs output for the full error.`
+            });
+        } else {
+            return Observable.of({
+                status: e.status,
+                statusText: this.statusCodeToText(e.status),
+                text: () => e._body
+            });
+        }
+    }
+
+    runFunction(functionInfo: FunctionInfo, content: string, custom_url:string) {
         var inputBinding = (functionInfo.config && functionInfo.config.bindings
             ? functionInfo.config.bindings.find(e => e.type === 'httpTrigger')
             : null);
 
-        var url = inputBinding
-            ? `${this.mainSiteUrl}/api/${functionInfo.name.toLocaleLowerCase()}`
+        var url = (inputBinding && custom_url)
+            ? custom_url
             : `${this.mainSiteUrl}/admin/functions/${functionInfo.name.toLocaleLowerCase()}`;
 
         var _content: string = inputBinding
@@ -220,29 +242,44 @@ export class FunctionsService {
             }
         }
 
-        return this._http.post(url, _content, { headers: this.getMainSiteHeaders(contentType) })
-            .catch(e => {
-                if (this.isEasyAuthEnabled) {
-                    return Observable.of({
-                        status: 401,
-                        statusText: this.statusCodeToText(401),
-                        text: () => 'Authentication is enabled for the function app. Disable authentication before running the function.'
-                    });
-                } else if (e.status === 200 && e._body.type === 'error') {
-                    return Observable.of({
-                        status: 502,
-                        statusText: this.statusCodeToText(502),
-                        text: () => `There was an error running function (${functionInfo.name}). Check logs output for the full error.`
-                    });
-                } else {
-                    return Observable.of({
-                        status: e.status,
-                        statusText: this.statusCodeToText(e.status),
-                        text: () => e._body
-                    });
-                }
-            })
-            .map<RunFunctionResult>(r => ({ statusCode: r.status, statusText: this.statusCodeToText(r.status), content: r.text() }));
+        var methods = inputBinding.methods.map(x=>x.toLocaleLowerCase());
+        var method = "post";
+        if(methods){
+            method = methods[0];
+        }
+        switch(methods[0]) {
+            case "put":
+                return this._http.put(url, _content, { headers: this.getMainSiteHeaders(contentType) })
+                    .catch(e => {
+                        return this.handleFunctionException(functionInfo, e);
+                    })
+                    .map<RunFunctionResult>(r => ({ statusCode: r.status, statusText: this.statusCodeToText(r.status), content: r.text() }));
+            case "patch":
+                return this._http.patch(url, _content, { headers: this.getMainSiteHeaders(contentType) })
+                    .catch(e => {
+                        return this.handleFunctionException(functionInfo, e);
+                    })
+                    .map<RunFunctionResult>(r => ({ statusCode: r.status, statusText: this.statusCodeToText(r.status), content: r.text() }));
+            case "delete":
+                return this._http.delete(url,{ headers: this.getMainSiteHeaders(contentType) } )
+                    .catch(e => {
+                        return this.handleFunctionException(functionInfo, e);
+                    })
+                    .map<RunFunctionResult>(r => ({ statusCode: r.status, statusText: this.statusCodeToText(r.status), content: r.text() }));
+            case "get":
+                console.log("getting");
+                return this._http.get(url,{ headers: this.getMainSiteHeaders(contentType) } )
+                    .catch(e => {
+                        return this.handleFunctionException(functionInfo, e);
+                    })
+                    .map<RunFunctionResult>(r => ({ statusCode: r.status, statusText: this.statusCodeToText(r.status), content: r.text() }));
+            default:
+                return this._http.post(url, _content, { headers: this.getMainSiteHeaders(contentType) })
+                    .catch(e => {
+                        return this.handleFunctionException(functionInfo, e);
+                    })
+                    .map<RunFunctionResult>(r => ({ statusCode: r.status, statusText: this.statusCodeToText(r.status), content: r.text() }));
+        }
     }
 
     @ClearCache('getFunctions')
@@ -285,7 +322,8 @@ export class FunctionsService {
     }
 
     getFunctionInvokeUrl(fi: FunctionInfo) {
-        return `${this.scmUrl.replace('.scm.', '.')}/api/${fi.name}`;
+        var trigger = fi.config.bindings.find(e => e.type.toLocaleLowerCase().endsWith('trigger'));
+        return `${this.scmUrl.replace('.scm.', '.')}/api/${trigger.route !== undefined ? trigger.route : fi.name}`; 
     }
 
     @ClearCache('getFunction', 'href')

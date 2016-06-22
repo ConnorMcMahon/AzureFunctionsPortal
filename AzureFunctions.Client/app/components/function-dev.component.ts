@@ -13,6 +13,7 @@ import {BroadcastEvent} from '../models/broadcast-event'
 import {PortalService} from '../services/portal.service';
 import {BindingType} from '../models/binding';
 import {CopyPreComponent} from './copy-pre.component';
+import {CopyInputComponent} from './copy-input.component';
 import {RunFunctionResult} from '../models/run-function-result';
 import {FileExplorerComponent} from './file-explorer.component';
 import {GlobalStateService} from '../services/global-state.service';
@@ -27,12 +28,14 @@ import {BusyStateComponent} from './busy-state.component';
         FunctionDesignerComponent,
         LogStreamingComponent,
         CopyPreComponent,
+        CopyInputComponent,
         FileExplorerComponent,
         BusyStateComponent
     ]
 })
 export class FunctionDevComponent implements OnChanges {
     @ViewChild(FileExplorerComponent) fileExplorer: FileExplorerComponent;
+    @ViewChild(CopyInputComponent) urlContainer : CopyInputComponent;
     @ViewChildren(BusyStateComponent) BusyStates: QueryList<BusyStateComponent>;
     @Input() selectedFunction: FunctionInfo;
     public disabled: boolean;
@@ -234,7 +237,8 @@ export class FunctionDevComponent implements OnChanges {
             var busyComponent = this.BusyStates.toArray().find(e => e.name === 'run-busy');
             busyComponent.setBusyState();
             var testData = typeof this.updatedTestContent !== 'undefined' ? this.updatedTestContent : this.functionInfo.test_data;
-            this.running = this._functionsService.runFunction(this.functionInfo, testData)
+            var url = this.urlContainer !== undefined ? this.urlContainer.getUrl() : undefined;
+            this.running = this._functionsService.runFunction(this.functionInfo, testData, url)
                 .subscribe(r => { this.runResult = r; busyComponent.clearBusyState(); delete this.running; });
         }
     }

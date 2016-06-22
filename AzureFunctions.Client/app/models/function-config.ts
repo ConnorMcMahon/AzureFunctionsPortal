@@ -7,8 +7,9 @@ export interface FunctionBinding {
     name: string;
     direction: string;
     type: string;
-    path: string;
+    route: string;
     queueName: string;
+    methods: string[];
     schedule: string;
     runOnStartup: boolean;
     partitionKey: string;
