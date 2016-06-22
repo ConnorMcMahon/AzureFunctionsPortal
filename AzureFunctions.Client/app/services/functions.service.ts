@@ -242,12 +242,15 @@ export class FunctionsService {
             }
         }
 
-        var methods = inputBinding.methods.map(x=>x.toLocaleLowerCase());
+        var methods:string[];
+        if(inputBinding && inputBinding.methods){
+            methods = inputBinding.methods.map(x=>x.toLocaleLowerCase());
+        }
         var method = "post";
         if(methods){
             method = methods[0];
         }
-        switch(methods[0]) {
+        switch(method) {
             case "put":
                 return this._http.put(url, _content, { headers: this.getMainSiteHeaders(contentType) })
                     .catch(e => {
